@@ -1,0 +1,190 @@
+name: Rust release-plz
+
+# Reusable two-phase release-plz workflow: a `release-pr` job that keeps a
+# version-bump/changelog PR up to date on every push to main, and a `release`
+# job that publishes to the cargo registry and cuts a GitHub release once a
+# release PR has been merged. The two jobs run independently (no `needs:`
+# between them, matching release-plz's own recommended layout) because
+# `release-plz release-pr`/`release-plz release` are both idempotent: a job
+# run that finds nothing new to do is a no-op rather than an error.
+#
+# Git-write auth is minted here, inside this reusable workflow, from the
+# slipstream-code-new GitHub App -- consuming workflows never pass a token in.
+# Commits (and tags) are SSH-signed with the org's RELEASE_SIGNING_KEY so they
+# show up as Verified regardless of which identity the App token belongs to.
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: >-
+          Path to the crate or Cargo workspace root release-plz should
+          operate on, relative to the repository root. Use a subdirectory
+          here for repos where the workspace isn't at the repo root.
+        required: false
+        type: string
+        default: "."
+      registry:
+        description: >-
+          Cargo registry name to publish to (must match a
+          [registries.<name>] entry in .cargo/config.toml). Leave unset to
+          publish to crates.io.
+        required: false
+        type: string
+        default: ""
+      release-plz-version:
+        description: release-plz CLI version for MarcoIeni/release-plz-action to install.
+        required: false
+        type: string
+        default: "0.5.130"
+      runs-on:
+        description: Runner label both jobs execute on.
+        required: false
+        type: string
+        default: ubuntu-24.04
+    secrets:
+      cargo-registry-token:
+        description: Token used to publish crates to the cargo registry.
+        required: true
+      release-signing-key:
+        description: SSH private key used to sign release-plz's commits and tags.
+        required: true
+
+jobs:
+  release-pr:
+    name: release-plz PR
+    runs-on: ${{ inputs.runs-on }}
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: release-plz-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - name: Mint slipstream-code-new GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.GH_AUTOMATION_APP_ID }}
+          private-key: ${{ secrets.GH_AUTOMATION_APP_PRIVATE_KEY }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: true
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ inputs.working-directory }}
+
+      - name: Configure signed-commit identity
+        shell: bash
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.release-signing-key }}
+          RELEASE_SIGNING_NAME: ${{ vars.RELEASE_SIGNING_NAME }}
+          RELEASE_SIGNING_EMAIL: ${{ vars.RELEASE_SIGNING_EMAIL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RELEASE_SIGNING_KEY:-}" ]; then
+            echo "release-signing-key secret is required" >&2
+            exit 1
+          fi
+          signing_key_path="${RUNNER_TEMP:-/tmp}/release-signing-key"
+          printf '%s\n' "$RELEASE_SIGNING_KEY" > "$signing_key_path"
+          chmod 600 "$signing_key_path"
+          git config --global gpg.format ssh
+          git config --global user.signingkey "$signing_key_path"
+          git config --global commit.gpgsign true
+          git config --global tag.gpgsign true
+          {
+            echo "GIT_AUTHOR_NAME=${RELEASE_SIGNING_NAME:-release-plz-bot}"
+            echo "GIT_AUTHOR_EMAIL=${RELEASE_SIGNING_EMAIL:-release-plz-bot@users.noreply.github.com}"
+            echo "GIT_COMMITTER_NAME=${RELEASE_SIGNING_NAME:-release-plz-bot}"
+            echo "GIT_COMMITTER_EMAIL=${RELEASE_SIGNING_EMAIL:-release-plz-bot@users.noreply.github.com}"
+          } >> "$GITHUB_ENV"
+          # GIT_AUTHOR_*/GIT_COMMITTER_* env vars take precedence over
+          # `git config user.name/user.email`, so this identity survives even
+          # though release-plz-action's own "configure git user from token"
+          # step runs `git config --global user.name/email` again later in
+          # this job.
+
+      - name: Run release-plz release-pr
+        uses: MarcoIeni/release-plz-action@v0.5.130
+        with:
+          command: release-pr
+          version: ${{ inputs.release-plz-version }}
+          manifest_path: ${{ inputs.working-directory != '.' && format('{0}/Cargo.toml', inputs.working-directory) || '' }}
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+
+  release:
+    name: release-plz publish
+    runs-on: ${{ inputs.runs-on }}
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - name: Mint slipstream-code-new GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.GH_AUTOMATION_APP_ID }}
+          private-key: ${{ secrets.GH_AUTOMATION_APP_PRIVATE_KEY }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: true
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ inputs.working-directory }}
+
+      - name: Configure signed-tag identity
+        shell: bash
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.release-signing-key }}
+          RELEASE_SIGNING_NAME: ${{ vars.RELEASE_SIGNING_NAME }}
+          RELEASE_SIGNING_EMAIL: ${{ vars.RELEASE_SIGNING_EMAIL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RELEASE_SIGNING_KEY:-}" ]; then
+            echo "release-signing-key secret is required" >&2
+            exit 1
+          fi
+          signing_key_path="${RUNNER_TEMP:-/tmp}/release-signing-key"
+          printf '%s\n' "$RELEASE_SIGNING_KEY" > "$signing_key_path"
+          chmod 600 "$signing_key_path"
+          git config --global gpg.format ssh
+          git config --global user.signingkey "$signing_key_path"
+          git config --global commit.gpgsign true
+          git config --global tag.gpgsign true
+          {
+            echo "GIT_AUTHOR_NAME=${RELEASE_SIGNING_NAME:-release-plz-bot}"
+            echo "GIT_AUTHOR_EMAIL=${RELEASE_SIGNING_EMAIL:-release-plz-bot@users.noreply.github.com}"
+            echo "GIT_COMMITTER_NAME=${RELEASE_SIGNING_NAME:-release-plz-bot}"
+            echo "GIT_COMMITTER_EMAIL=${RELEASE_SIGNING_EMAIL:-release-plz-bot@users.noreply.github.com}"
+          } >> "$GITHUB_ENV"
+
+      - name: Run release-plz release
+        uses: MarcoIeni/release-plz-action@v0.5.130
+        with:
+          command: release
+          version: ${{ inputs.release-plz-version }}
+          manifest_path: ${{ inputs.working-directory != '.' && format('{0}/Cargo.toml', inputs.working-directory) || '' }}
+          registry: ${{ inputs.registry }}
+          token: ${{ secrets.cargo-registry-token }}
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}

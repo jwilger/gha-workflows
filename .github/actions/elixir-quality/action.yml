@@ -1,0 +1,92 @@
+name: Elixir quality checks
+description: >-
+  Sets up the BEAM toolchain (erlef/setup-beam), restores a mix deps/build
+  cache, and runs the standard Elixir quality-check fan-out (mix format,
+  credo, dialyzer, sobelow). Each check is individually skippable, since not
+  every consuming repo runs all four. Consuming repos still declare their own
+  jobs and call this action as a step; it does not orchestrate a full job by
+  itself.
+
+inputs:
+  otp-version:
+    description: >-
+      OTP version to install, passed straight through to erlef/setup-beam
+      (e.g. "26.2"). Required -- consuming repos differ, so there is no
+      hardcoded default.
+    required: true
+  elixir-version:
+    description: >-
+      Elixir version to install, passed straight through to erlef/setup-beam
+      (e.g. "1.16.2-otp-26"). Required -- consuming repos differ, so there is
+      no hardcoded default.
+    required: true
+  working-directory:
+    description: >-
+      Directory containing mix.exs, for repos where the Mix project does not
+      live at the repository root.
+    required: false
+    default: "."
+  run-format:
+    description: Run `mix format --check-formatted`.
+    required: false
+    default: "true"
+  run-credo:
+    description: Run `mix credo --strict`.
+    required: false
+    default: "true"
+  run-dialyzer:
+    description: Run `mix dialyzer`.
+    required: false
+    default: "true"
+  run-sobelow:
+    description: Run `mix sobelow --config`.
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Erlang/Elixir
+      uses: erlef/setup-beam@v1
+      with:
+        otp-version: ${{ inputs.otp-version }}
+        elixir-version: ${{ inputs.elixir-version }}
+
+    - name: Restore mix deps/build cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          ${{ inputs.working-directory }}/deps
+          ${{ inputs.working-directory }}/_build
+        key: ${{ runner.os }}-mix-${{ inputs.otp-version }}-${{ inputs.elixir-version }}-${{ hashFiles('**/mix.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-mix-${{ inputs.otp-version }}-${{ inputs.elixir-version }}-
+
+    - name: Install mix dependencies
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: mix deps.get
+
+    - name: mix format --check-formatted
+      if: inputs.run-format == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: mix format --check-formatted
+
+    - name: mix credo --strict
+      if: inputs.run-credo == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: mix credo --strict
+
+    - name: mix dialyzer
+      if: inputs.run-dialyzer == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: mix dialyzer
+
+    - name: mix sobelow
+      if: inputs.run-sobelow == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: mix sobelow --config
