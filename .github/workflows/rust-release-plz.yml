@@ -9,7 +9,7 @@ name: Rust release-plz
 # run that finds nothing new to do is a no-op rather than an error.
 #
 # Git-write auth is minted here, inside this reusable workflow, from the
-# slipstream-code-new GitHub App -- consuming workflows never pass a token in.
+# slipstream-eng GitHub App -- consuming workflows never pass a token in.
 # Commits (and tags) are SSH-signed with the org's RELEASE_SIGNING_KEY so they
 # show up as Verified regardless of which identity the App token belongs to.
 
@@ -61,7 +61,7 @@ jobs:
       group: release-plz-${{ github.ref }}
       cancel-in-progress: false
     steps:
-      - name: Mint slipstream-code-new GitHub App token
+      - name: Mint slipstream-eng GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v2
         with:
@@ -130,7 +130,7 @@ jobs:
       contents: write
       pull-requests: read
     steps:
-      - name: Mint slipstream-code-new GitHub App token
+      - name: Mint slipstream-eng GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v2
         with:
