@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - trunk-merge/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Check shared workflow assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f .github/actions/elixir-quality/action.yml
+          test -f .github/actions/release-sign-commit/action.yml
+          test -f .github/workflows/rust-release-plz.yml
