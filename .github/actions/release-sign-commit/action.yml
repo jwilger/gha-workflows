@@ -23,8 +23,8 @@ inputs:
     required: true
   github-token:
     description: >-
-      Token used by `gh release create`. Supply this from a
-      create-github-app-token step using the org GitHub App.
+      Token used by git and `gh release create`. Supply a PAT that can push
+      release branches/tags and create GitHub releases for the repository.
     required: true
   working-directory:
     description: Directory to operate in, for repos where the release target isn't the repo root.
