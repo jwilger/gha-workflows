@@ -9,9 +9,10 @@ name: Rust release-plz
 # run that finds nothing new to do is a no-op rather than an error.
 #
 # Git-write auth is minted here, inside this reusable workflow, from the
-# slipstream-eng GitHub App -- consuming workflows never pass a token in.
-# Commits (and tags) are SSH-signed with the org's RELEASE_SIGNING_KEY so they
-# show up as Verified regardless of which identity the App token belongs to.
+# GitHub App -- consuming workflows never pass a git-write token in. Runtime
+# secrets are loaded from the shared 1Password Github Secrets vault. Commits
+# (and tags) are SSH-signed with RELEASE_SIGNING_KEY so they satisfy required
+# signed-commit rules regardless of which identity the App token belongs to.
 
 on:
   workflow_call:
@@ -43,11 +44,8 @@ on:
         type: string
         default: ubuntu-24.04
     secrets:
-      cargo-registry-token:
-        description: Token used to publish crates to the cargo registry.
-        required: true
-      release-signing-key:
-        description: SSH private key used to sign release-plz's commits and tags.
+      op-service-account-token:
+        description: 1Password service account token for the Github Secrets vault.
         required: true
 
 jobs:
@@ -61,12 +59,20 @@ jobs:
       group: release-plz-${{ github.ref }}
       cancel-in-progress: false
     steps:
-      - name: Mint slipstream-eng GitHub App token
+      - name: Load release secrets
+        id: load_secrets
+        uses: 1password/load-secrets-action@v4
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.op-service-account-token }}
+          GH_AUTOMATION_APP_PRIVATE_KEY: op://Github Secrets/GH_AUTOMATION_APP_PRIVATE_KEY/credential
+          RELEASE_SIGNING_KEY: op://Github Secrets/RELEASE_SIGNING_KEY/private key?ssh-format=openssh
+
+      - name: Mint GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ vars.GH_AUTOMATION_APP_ID }}
-          private-key: ${{ secrets.GH_AUTOMATION_APP_PRIVATE_KEY }}
+          private-key: ${{ steps.load_secrets.outputs.GH_AUTOMATION_APP_PRIVATE_KEY }}
 
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -86,7 +92,7 @@ jobs:
       - name: Configure signed-commit identity
         shell: bash
         env:
-          RELEASE_SIGNING_KEY: ${{ secrets.release-signing-key }}
+          RELEASE_SIGNING_KEY: ${{ steps.load_secrets.outputs.RELEASE_SIGNING_KEY }}
           RELEASE_SIGNING_NAME: ${{ vars.RELEASE_SIGNING_NAME }}
           RELEASE_SIGNING_EMAIL: ${{ vars.RELEASE_SIGNING_EMAIL }}
         run: |
@@ -130,12 +136,21 @@ jobs:
       contents: write
       pull-requests: read
     steps:
-      - name: Mint slipstream-eng GitHub App token
+      - name: Load release secrets
+        id: load_secrets
+        uses: 1password/load-secrets-action@v4
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.op-service-account-token }}
+          GH_AUTOMATION_APP_PRIVATE_KEY: op://Github Secrets/GH_AUTOMATION_APP_PRIVATE_KEY/credential
+          RELEASE_SIGNING_KEY: op://Github Secrets/RELEASE_SIGNING_KEY/private key?ssh-format=openssh
+          CARGO_REGISTRY_TOKEN: op://Github Secrets/CARGO_REGISTRY_TOKEN/credential
+
+      - name: Mint GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ vars.GH_AUTOMATION_APP_ID }}
-          private-key: ${{ secrets.GH_AUTOMATION_APP_PRIVATE_KEY }}
+          private-key: ${{ steps.load_secrets.outputs.GH_AUTOMATION_APP_PRIVATE_KEY }}
 
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -155,7 +170,7 @@ jobs:
       - name: Configure signed-tag identity
         shell: bash
         env:
-          RELEASE_SIGNING_KEY: ${{ secrets.release-signing-key }}
+          RELEASE_SIGNING_KEY: ${{ steps.load_secrets.outputs.RELEASE_SIGNING_KEY }}
           RELEASE_SIGNING_NAME: ${{ vars.RELEASE_SIGNING_NAME }}
           RELEASE_SIGNING_EMAIL: ${{ vars.RELEASE_SIGNING_EMAIL }}
         run: |
@@ -185,6 +200,6 @@ jobs:
           version: ${{ inputs.release-plz-version }}
           manifest_path: ${{ inputs.working-directory != '.' && format('{0}/Cargo.toml', inputs.working-directory) || '' }}
           registry: ${{ inputs.registry }}
-          token: ${{ secrets.cargo-registry-token }}
+          token: ${{ steps.load_secrets.outputs.CARGO_REGISTRY_TOKEN }}
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
