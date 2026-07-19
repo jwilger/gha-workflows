@@ -60,24 +60,24 @@ jobs:
     steps:
       - name: Load release secrets
         id: load_secrets
-        uses: 1password/load-secrets-action@v4
+        uses: 1password/load-secrets-action@3a12b0ab99d9cd590a3e9b5a90ea017210ed9556 # v4
         env:
           OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.op-service-account-token }}
           GH_RELEASE_AUTOMATION_TOKEN: op://Github Secrets/GH_RELEASE_AUTOMATION_TOKEN/credential
           RELEASE_SIGNING_KEY: op://Github Secrets/RELEASE_SIGNING_KEY/private key?ssh-format=openssh
 
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 0
           token: ${{ steps.load_secrets.outputs.GH_RELEASE_AUTOMATION_TOKEN }}
           persist-credentials: true
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
 
       - name: Cache cargo dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: ${{ inputs.working-directory }}
 
@@ -113,7 +113,7 @@ jobs:
           # this job.
 
       - name: Run release-plz release-pr
-        uses: MarcoIeni/release-plz-action@v0.5.130
+        uses: MarcoIeni/release-plz-action@e8792575c7f2366cf6ff3ccc33ead9ace5b691c7 # v0.5.130
         with:
           command: release-pr
           version: ${{ inputs.release-plz-version }}
@@ -130,7 +130,7 @@ jobs:
     steps:
       - name: Load release secrets
         id: load_secrets
-        uses: 1password/load-secrets-action@v4
+        uses: 1password/load-secrets-action@3a12b0ab99d9cd590a3e9b5a90ea017210ed9556 # v4
         env:
           OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.op-service-account-token }}
           GH_RELEASE_AUTOMATION_TOKEN: op://Github Secrets/GH_RELEASE_AUTOMATION_TOKEN/credential
@@ -138,17 +138,17 @@ jobs:
           CARGO_REGISTRY_TOKEN: op://Github Secrets/CARGO_REGISTRY_TOKEN/credential
 
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 0
           token: ${{ steps.load_secrets.outputs.GH_RELEASE_AUTOMATION_TOKEN }}
           persist-credentials: true
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
 
       - name: Cache cargo dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: ${{ inputs.working-directory }}
 
@@ -179,7 +179,7 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Run release-plz release
-        uses: MarcoIeni/release-plz-action@v0.5.130
+        uses: MarcoIeni/release-plz-action@e8792575c7f2366cf6ff3ccc33ead9ace5b691c7 # v0.5.130
         with:
           command: release
           version: ${{ inputs.release-plz-version }}

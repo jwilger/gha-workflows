@@ -25,3 +25,9 @@ jobs:
           test -f .github/actions/elixir-quality/action.yml
           test -f .github/actions/release-sign-commit/action.yml
           test -f .github/workflows/rust-release-plz.yml
+
+      - name: Reject mutable release action references
+        shell: bash
+        run: |
+          .github/scripts/test-check-rust-release-action-pins.sh
+          .github/scripts/check-rust-release-action-pins.sh
